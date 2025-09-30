@@ -1,0 +1,19 @@
+# ESPHome
+.esphome/
+*.bin
+
+# Python virtual environment
+venv/
+__pycache__/
+*.pyc
+
+# Secrets - DO NOT COMMIT
+secrets.yaml
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

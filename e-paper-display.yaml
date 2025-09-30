@@ -1,0 +1,404 @@
+esphome:
+  name: e-paper-display
+  friendly_name: E-Paper Display
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+  level: DEBUG
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_pw
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "E-Paper-Display Fallback Hotspot"
+    password: !secret ap_password
+
+captive_portal:
+
+# Import outdoor weather sensors from Home Assistant
+sensor:
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_outdoor_temperature
+    id: outdoor_temp
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_humidity
+    id: outdoor_humidity
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_wind_speed
+    id: wind_speed_sensor
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_wind_gust
+    id: wind_gust_sensor
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_wind_direction
+    id: wind_direction
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_solar_radiation
+    id: solar_radiation
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_uv_index
+    id: uv_index
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_max_daily_wind_gust
+    id: max_daily_gust
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_feels_like_temperature
+    id: feels_like_temp
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_windchill
+    id: windchill_temp
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_dewpoint
+    id: dewpoint_temp
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_rain_rate_piezo
+    id: rain_rate
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_event_rain_piezo
+    id: event_rain
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_hourly_rain_piezo
+    id: hourly_rain
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_daily_rain_piezo
+    id: daily_rain
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_weekly_rain_piezo
+    id: weekly_rain
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_monthly_rain_piezo
+    id: monthly_rain
+    
+  - platform: homeassistant
+    entity_id: sensor.gw1200b_yearly_rain_piezo
+    id: yearly_rain
+
+font:
+  - file: "gfonts://Roboto@700"
+    id: font_large
+    size: 32
+  - file: "gfonts://Roboto@900"
+    id: font_title
+    size: 28
+  - file: "gfonts://Roboto@700"
+    id: font_medium
+    size: 24
+  - file: "gfonts://Roboto@500"
+    id: font_small
+    size: 22
+  - file: "gfonts://Roboto@400"
+    id: font_tiny
+    size: 19
+  - file: "gfonts://Orbitron@700"
+    id: font_clock
+    size: 42
+  - file: "gfonts://Orbitron@700"
+    id: font_temp
+    size: 60
+  - file: "fonts/weathericons-regular-webfont.ttf"
+    id: weather_icons
+    size: 40
+    glyphs: [
+      "\U0000f073", # wi-humidity
+      "\U0000f021", # wi-windy  
+      "\U0000f055", # wi-thermometer
+      "\U0000f079", # wi-barometer
+      "\U0000f002", # wi-day-sunny
+      "\U0000f019", # wi-rain
+    ]
+
+spi:
+  clk_pin: GPIO13
+  mosi_pin: GPIO14
+
+display:
+  - platform: waveshare_epaper
+    cs_pin: GPIO15
+    dc_pin: GPIO27
+    busy_pin: 
+      number: GPIO25
+      inverted: true
+    reset_pin: GPIO26
+    model: 7.50inV2p
+    update_interval: 30s
+    full_update_every: 30
+    id: epaper_display
+    lambda: |-
+      // Clock in top-right
+      auto time = id(homeassistant_time).now();
+      if (time.is_valid()) {
+        it.strftime(780, 15, id(font_clock), TextAlign::TOP_RIGHT, "%H:%M", time);
+        it.strftime(775, 60, id(font_small), TextAlign::TOP_RIGHT, "%a, %b %d", time);
+      }
+      
+      // Large temperature (top-left) - more emphasis
+      float temp = id(outdoor_temp).state;
+      float feels_like = id(feels_like_temp).state;
+      float dewpoint = id(dewpoint_temp).state;
+      float humidity = id(outdoor_humidity).state;
+      
+      if (!std::isnan(temp)) {
+        // Temperature section with proper alignment
+        int temp_value_x = 280;  // Right align position
+        int label_x = 20;        // Left align labels
+        int value_x = 280;       // Right align values
+        
+        if (!std::isnan(feels_like)) {
+          // Thermometer icon + temperature
+          it.printf(20, 20, id(weather_icons), TextAlign::LEFT, "\U0000f055");
+          it.printf(50, 20, id(font_temp), TextAlign::LEFT, "%.1f°", temp);
+          
+          // Thermometer with sun icon + feels like temperature  
+          it.printf(260, 20, id(weather_icons), TextAlign::LEFT, "\U0000f055");
+          it.printf(265, 20, id(weather_icons), TextAlign::LEFT, "\U0000f002");
+          it.printf(325, 20, id(font_temp), TextAlign::LEFT, "%.1f°", feels_like);
+        }
+        
+        // Left-aligned labels, right-aligned values
+        int start_y = 60;
+        int line_spacing = 35;
+        
+        if (!std::isnan(dewpoint)) {
+          it.printf(label_x+20, start_y + line_spacing, id(font_large), "Dewpoint");
+          it.printf(value_x, start_y + line_spacing, id(font_large), TextAlign::RIGHT, "%.1f°", dewpoint);
+        }
+        
+        if (!std::isnan(humidity)) {
+          it.printf(label_x+20, start_y + (line_spacing * 2), id(font_large), "Humidity");
+          it.printf(value_x, start_y + (line_spacing * 2), id(font_large), TextAlign::RIGHT, "%.0f%%", humidity);
+        }
+      }
+      
+      // Large wind compass with tick marks - moved right by 10 pixels
+      float wind_speed = id(wind_speed_sensor).state;
+      float wind_gust = id(wind_gust_sensor).state;
+      float wind_dir = id(wind_direction).state;
+      
+      int compass_x = 150;  // Center compass
+      int compass_y = 320;
+      int radius = 90;
+      
+      // Compass ring design with segments
+      int outer_radius = radius;
+      int inner_radius = radius - 20;
+      
+      // Draw outer and inner circles
+      it.circle(compass_x, compass_y, outer_radius);
+      it.circle(compass_x, compass_y, inner_radius);
+      
+      // Draw 16 compass segments (every 22.5 degrees)
+      for (int i = 0; i < 16; i++) {
+        float angle = i * 22.5 * M_PI / 180.0;
+        
+        // Draw radial lines for segments
+        int outer_x = compass_x + (int)(outer_radius * sin(angle));
+        int outer_y = compass_y - (int)(outer_radius * cos(angle));
+        int inner_x = compass_x + (int)(inner_radius * sin(angle));
+        int inner_y = compass_y - (int)(inner_radius * cos(angle));
+        
+        it.line(outer_x, outer_y, inner_x, inner_y);
+      }
+      
+      // Cardinal and intercardinal directions - positioned outside outer circle
+      int label_radius = radius + 15;
+      
+      // Main cardinals
+      it.printf(compass_x, compass_y - label_radius, id(font_small), TextAlign::CENTER, "N");
+      it.printf(compass_x, compass_y + label_radius, id(font_small), TextAlign::CENTER, "S");
+      it.printf(compass_x + label_radius, compass_y + 2, id(font_small), TextAlign::CENTER, "E");
+      it.printf(compass_x - label_radius, compass_y + 2, id(font_small), TextAlign::CENTER, "W");
+      
+      // Intercardinals
+      int diag_offset = (int)(label_radius * 0.707); // cos(45°) ≈ 0.707
+      it.printf(compass_x + diag_offset, compass_y - diag_offset, id(font_tiny), TextAlign::CENTER, "NE");
+      it.printf(compass_x - diag_offset, compass_y - diag_offset, id(font_tiny), TextAlign::CENTER, "NW");
+      it.printf(compass_x + diag_offset, compass_y + diag_offset, id(font_tiny), TextAlign::CENTER, "SE");
+      it.printf(compass_x - diag_offset, compass_y + diag_offset, id(font_tiny), TextAlign::CENTER, "SW");
+      
+      // Wind data in center with better mph positioning
+      if (!std::isnan(wind_speed)) {
+        // Format wind speed with smaller mph suffix positioned better
+        if (wind_speed >= 10.0) {
+          it.printf(compass_x - 10, compass_y - 30, id(font_large), TextAlign::CENTER, "%.0f", wind_speed);
+          it.printf(compass_x + 20, compass_y - 30, id(font_tiny), TextAlign::LEFT, "mph");
+        } else {
+          it.printf(compass_x - 10, compass_y - 30, id(font_large), TextAlign::CENTER, "%.1f", wind_speed);
+          it.printf(compass_x + 15, compass_y - 20, id(font_tiny), TextAlign::LEFT, "mph");
+        }
+        
+        if (!std::isnan(wind_gust)) {
+          // Also format gust the same way
+          if (wind_gust >= 10.0) {
+            it.printf(compass_x, compass_y - 5, id(font_tiny), TextAlign::CENTER, "Gust: %.0f mph", wind_gust);
+          } else {
+            it.printf(compass_x, compass_y - 5, id(font_tiny), TextAlign::CENTER, "Gust: %.1f mph", wind_gust);
+          }
+        }
+        
+        //Max gust
+        float max_gust = id(max_daily_gust).state;
+        if (!std::isnan(max_gust)) {
+          // Format max gust the same way
+          if (max_gust >= 10.0) {
+            it.printf(compass_x, compass_y + 15, id(font_tiny), TextAlign::CENTER, "Max: %.0f mph", max_gust);
+          } else {
+            it.printf(compass_x, compass_y + 15, id(font_tiny), TextAlign::CENTER, "Max: %.1f mph", max_gust);
+          }
+        }
+        
+        // Simple and clean wind direction indicator
+        if (!std::isnan(wind_dir)) {
+          // Determine which segment the wind is coming from (16 segments, 22.5° each)
+          int segment = (int)((wind_dir + 11.25) / 22.5) % 16;
+          float segment_center = segment * 22.5;
+          float segment_start = segment_center - 11.25;
+          float segment_end = segment_center + 11.25;
+          
+          // Fill the entire segment area with multiple triangular fills
+          float angle_step = 0.5; // Small step for smooth fill
+          for (float angle = segment_start; angle < segment_end; angle += angle_step) {
+            float rad1 = angle * M_PI / 180.0;
+            float rad2 = (angle + angle_step) * M_PI / 180.0;
+            
+            int outer_x1 = compass_x + (int)(outer_radius * sin(rad1));
+            int outer_y1 = compass_y - (int)(outer_radius * cos(rad1));
+            int outer_x2 = compass_x + (int)(outer_radius * sin(rad2));
+            int outer_y2 = compass_y - (int)(outer_radius * cos(rad2));
+            int inner_x1 = compass_x + (int)(inner_radius * sin(rad1));
+            int inner_y1 = compass_y - (int)(inner_radius * cos(rad1));
+            int inner_x2 = compass_x + (int)(inner_radius * sin(rad2));
+            int inner_y2 = compass_y - (int)(inner_radius * cos(rad2));
+            
+            // Draw quad as two triangles to fill segment
+            it.filled_triangle(inner_x1, inner_y1, outer_x1, outer_y1, inner_x2, inner_y2);
+            it.filled_triangle(inner_x2, inner_y2, outer_x1, outer_y1, outer_x2, outer_y2);
+          }
+        }
+      } else {
+        it.printf(compass_x, compass_y, id(font_small), TextAlign::CENTER, "No Wind");
+      }
+      
+      // Draw better sun with solar/UV data
+      int sun_x = 675;
+      int sun_y = 200;
+      int sun_radius = 75;
+      
+      // Draw sun circle (outline only, not filled)
+      it.circle(sun_x, sun_y, sun_radius);
+      
+      // Draw sun rays with alternating lengths for more realistic appearance
+      for (int i = 0; i < 12; i++) {
+        float ray_angle = i * 30.0 * M_PI / 180.0;
+        
+        // Alternate between long and short rays
+        int ray_length = (i % 2 == 0) ? 25 : 15;
+        
+        int ray_start_x = sun_x + (int)((sun_radius + 5) * sin(ray_angle));
+        int ray_start_y = sun_y - (int)((sun_radius + 5) * cos(ray_angle));
+        int ray_end_x = sun_x + (int)((sun_radius + ray_length) * sin(ray_angle));
+        int ray_end_y = sun_y - (int)((sun_radius + ray_length) * cos(ray_angle));
+        
+        // Make rays thicker
+        it.line(ray_start_x, ray_start_y, ray_end_x, ray_end_y);
+        it.line(ray_start_x + 1, ray_start_y, ray_end_x + 1, ray_end_y);
+      }
+      
+      // Solar and UV data inside the sun
+      float solar = id(solar_radiation).state;
+      float uv = id(uv_index).state;
+      
+      if (!std::isnan(solar)) {
+        it.printf(sun_x, sun_y - 21, id(font_small), TextAlign::CENTER, "%.0f W/m2", solar);
+      }
+      
+      if (!std::isnan(uv)) {
+        std::string uv_level = "Low";
+        if (uv >= 11) uv_level = "Extreme";
+        else if (uv >= 8) uv_level = "Very High";
+        else if (uv >= 6) uv_level = "High";
+        else if (uv >= 3) uv_level = "Moderate";
+        
+        it.printf(sun_x, sun_y, id(font_small), TextAlign::CENTER, "UV %.1f", uv);
+        it.printf(sun_x, sun_y + 20, id(font_small), TextAlign::CENTER, "(%s)", uv_level.c_str());
+      }
+      
+
+      
+      // Rain data section
+      int rain_x = 400;
+      int rain_y = 200;
+      int rain_spacing = 28;
+      
+      it.printf(rain_x, rain_y, id(font_medium), TextAlign::LEFT, "Rainfall");
+      
+      float rain_rate_val = id(rain_rate).state;
+      if (!std::isnan(rain_rate_val) && rain_rate_val > 0) {
+        it.printf(rain_x, rain_y + rain_spacing, id(font_small), TextAlign::LEFT, "Rate: %.2f in/hr", rain_rate_val);
+      }
+      
+      float hourly_rain_val = id(hourly_rain).state;
+      if (!std::isnan(hourly_rain_val) && hourly_rain_val > 0) {
+        it.printf(rain_x, rain_y + rain_spacing * 2, id(font_small), TextAlign::LEFT, "Hour: %.2f in", hourly_rain_val);
+      }
+      
+      float daily_rain_val = id(daily_rain).state;
+      if (!std::isnan(daily_rain_val)) {
+        it.printf(rain_x, rain_y + rain_spacing * 3, id(font_small), TextAlign::LEFT, "Today: %.2f in", daily_rain_val);
+      }
+      
+      float weekly_rain_val = id(weekly_rain).state;
+      if (!std::isnan(weekly_rain_val) && weekly_rain_val > 0) {
+        it.printf(rain_x, rain_y + rain_spacing * 4, id(font_small), TextAlign::LEFT, "Week: %.2f in", weekly_rain_val);
+      }
+      
+      float monthly_rain_val = id(monthly_rain).state;
+      if (!std::isnan(monthly_rain_val) && monthly_rain_val > 0) {
+        it.printf(rain_x, rain_y + rain_spacing * 5, id(font_small), TextAlign::LEFT, "Month: %.2f in", monthly_rain_val);
+      }
+      
+      float yearly_rain_val = id(yearly_rain).state;
+      if (!std::isnan(yearly_rain_val) && yearly_rain_val > 0) {
+        it.printf(rain_x, rain_y + rain_spacing * 6, id(font_small), TextAlign::LEFT, "Year: %.2f in", yearly_rain_val);
+      }
+      
+      // Windchill (moved up since bottom section is removed)
+      float windchill = id(windchill_temp).state;
+      if (!std::isnan(windchill) && !std::isnan(temp) && windchill < temp - 2) {
+        it.printf(300, 350, id(font_medium), "Windchill: %.1f°F", windchill);
+      }
+      
+      // Credit (bottom right)
+      // it.printf(740, 460, id(font_tiny), TextAlign::BOTTOM_RIGHT, "Ecowitt GW1200B");
+
+# Add time component for timestamp
+time:
+  - platform: homeassistant
+    id: homeassistant_time

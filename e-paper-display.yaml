@@ -100,6 +100,86 @@ sensor:
   - platform: homeassistant
     entity_id: sensor.gw1200b_yearly_rain_piezo
     id: yearly_rain
+    
+  # Stock market sensors
+  - platform: homeassistant
+    entity_id: sensor.yahoofinance_dji
+    id: stock_dow
+    
+  - platform: homeassistant
+    entity_id: sensor.yahoofinance_ixic
+    id: stock_nasdaq
+    
+  - platform: homeassistant
+    entity_id: sensor.yahoofinance_tsla
+    id: stock_tsla
+    
+  - platform: homeassistant
+    entity_id: sensor.yahoofinance_psqh
+    id: stock_psqh
+    
+  # 5-day forecast from input_number helpers (populated by automation)
+  - platform: homeassistant
+    entity_id: input_number.forecast_high_0
+    id: forecast_high_0
+    
+  - platform: homeassistant
+    entity_id: input_number.forecast_low_0
+    id: forecast_low_0
+    
+  - platform: homeassistant
+    entity_id: input_number.forecast_high_1
+    id: forecast_high_1
+    
+  - platform: homeassistant
+    entity_id: input_number.forecast_low_1
+    id: forecast_low_1
+    
+  - platform: homeassistant
+    entity_id: input_number.forecast_high_2
+    id: forecast_high_2
+    
+  - platform: homeassistant
+    entity_id: input_number.forecast_low_2
+    id: forecast_low_2
+    
+  - platform: homeassistant
+    entity_id: input_number.forecast_high_3
+    id: forecast_high_3
+    
+  - platform: homeassistant
+    entity_id: input_number.forecast_low_3
+    id: forecast_low_3
+    
+  - platform: homeassistant
+    entity_id: input_number.forecast_high_4
+    id: forecast_high_4
+    
+  - platform: homeassistant
+    entity_id: input_number.forecast_low_4
+    id: forecast_low_4
+    
+text_sensor:
+  # Stock percentage changes
+  - platform: homeassistant
+    entity_id: sensor.yahoofinance_dji
+    attribute: regularMarketChangePercent
+    id: stock_dow_change
+    
+  - platform: homeassistant
+    entity_id: sensor.yahoofinance_ixic
+    attribute: regularMarketChangePercent
+    id: stock_nasdaq_change
+    
+  - platform: homeassistant
+    entity_id: sensor.yahoofinance_tsla
+    attribute: regularMarketChangePercent
+    id: stock_tsla_change
+    
+  - platform: homeassistant
+    entity_id: sensor.yahoofinance_psqh
+    attribute: regularMarketChangePercent
+    id: stock_psqh_change
 
 font:
   - file: "gfonts://Roboto@700"
@@ -119,7 +199,7 @@ font:
     size: 19
   - file: "gfonts://Orbitron@700"
     id: font_clock
-    size: 42
+    size: 45
   - file: "gfonts://Orbitron@700"
     id: font_temp
     size: 60
@@ -127,7 +207,7 @@ font:
     id: weather_icons
     size: 40
     glyphs: [
-      "\U0000f073", # wi-humidity
+      "\U0000f07a", # wi-humidity
       "\U0000f021", # wi-windy  
       "\U0000f055", # wi-thermometer
       "\U0000f079", # wi-barometer
@@ -152,11 +232,20 @@ display:
     full_update_every: 30
     id: epaper_display
     lambda: |-
-      // Clock in top-right
+      // Date and time
       auto time = id(homeassistant_time).now();
       if (time.is_valid()) {
-        it.strftime(780, 15, id(font_clock), TextAlign::TOP_RIGHT, "%H:%M", time);
-        it.strftime(775, 60, id(font_small), TextAlign::TOP_RIGHT, "%a, %b %d", time);
+        // Local time in 12-hour format with AM/PM
+        it.strftime(780, 172, id(font_clock), TextAlign::RIGHT, "%I:%M %p", time);
+        
+        // Calculate IST time (UTC + 5:30)
+        // Get UTC timestamp and add IST offset
+        ESPTime ist_time = ESPTime::from_epoch_utc(time.timestamp + (5 * 3600) + (30 * 60));
+        
+        // Display IST below local time
+        // it.printf(780, 125, id(font_medium), TextAlign::RIGHT, "IST: ");
+        it.strftime(780, 147, id(font_large), TextAlign::RIGHT, "IST: %I:%M %p", ist_time);
+        //it.strftime(780, 470, id(font_medium), TextAlign::BOTTOM_RIGHT, "%a, %b %d", time);
       }
       
       // Large temperature (top-left) - more emphasis
@@ -171,30 +260,112 @@ display:
         int label_x = 20;        // Left align labels
         int value_x = 280;       // Right align values
         
-        if (!std::isnan(feels_like)) {
-          // Thermometer icon + temperature
-          it.printf(20, 20, id(weather_icons), TextAlign::LEFT, "\U0000f055");
-          it.printf(50, 20, id(font_temp), TextAlign::LEFT, "%.1f°", temp);
-          
-          // Thermometer with sun icon + feels like temperature  
-          it.printf(260, 20, id(weather_icons), TextAlign::LEFT, "\U0000f055");
-          it.printf(265, 20, id(weather_icons), TextAlign::LEFT, "\U0000f002");
-          it.printf(325, 20, id(font_temp), TextAlign::LEFT, "%.1f°", feels_like);
+        // Thermometer icon + temperature
+        it.printf(22, 20, id(weather_icons), TextAlign::LEFT, "\U0000f055");
+        it.printf(52, 10, id(font_temp), TextAlign::LEFT, "%.1f°", temp);
+        
+        // Always show feels like or wind chill
+        float windchill = id(windchill_temp).state;
+        if (!std::isnan(windchill) && windchill < temp - 2) {
+          // Show wind chill when significantly colder (with thermometer + wind icons)
+          it.printf(285, 20, id(weather_icons), TextAlign::LEFT, "\U0000f055");
+          it.printf(300, 20, id(weather_icons), TextAlign::LEFT, "\U0000f050"); // wind icon
+          it.printf(360, 10, id(font_temp), TextAlign::LEFT, "%.1f°", windchill);
+        } else if (!std::isnan(feels_like)) {
+          // Show feels like temperature
+          it.printf(285, 20, id(weather_icons), TextAlign::LEFT, "\U0000f055");
+          it.printf(300, 20, id(weather_icons), TextAlign::LEFT, "\U0000f002");
+          it.printf(360, 10, id(font_temp), TextAlign::LEFT, "%.1f°", feels_like);
         }
+        
+        // Horizontal divider line below main temperatures
+        // it.line(20, 85, 800, 85);
         
         // Left-aligned labels, right-aligned values
-        int start_y = 60;
+        int start_y = 55;
         int line_spacing = 35;
         
-        if (!std::isnan(dewpoint)) {
-          it.printf(label_x+20, start_y + line_spacing, id(font_large), "Dewpoint");
-          it.printf(value_x, start_y + line_spacing, id(font_large), TextAlign::RIGHT, "%.1f°", dewpoint);
-        }
+        //if (!std::isnan(dewpoint)) {
+        //  it.printf(label_x+20, start_y + line_spacing, id(font_large), "Dewpoint");
+        //  it.printf(value_x, start_y + line_spacing, id(font_large), TextAlign::RIGHT, "%.1f°", dewpoint);
+        //}
         
         if (!std::isnan(humidity)) {
-          it.printf(label_x+20, start_y + (line_spacing * 2), id(font_large), "Humidity");
-          it.printf(value_x, start_y + (line_spacing * 2), id(font_large), TextAlign::RIGHT, "%.0f%%", humidity);
+          //it.printf(label_x+20, start_y + (line_spacing * 1), id(font_large), "\U0000f07a");
+          it.printf(588, 20, id(weather_icons), TextAlign::LEFT, "\U0000f07a");
+          it.printf(780, 10, id(font_temp), TextAlign::RIGHT, "%.0f%%", humidity);
         }
+        
+        // 5-day forecast below humidity
+        int forecast_start_x = 572;
+        int forecast_y = 88;
+        int forecast_spacing = 46;
+        
+        // Get current time for day labels
+        auto forecast_time = id(homeassistant_time).now();
+        if (forecast_time.is_valid()) {
+          // Day 0 (Today)
+          it.strftime(forecast_start_x, forecast_y, id(font_small), TextAlign::TOP_CENTER, "%a", forecast_time);
+          float high_0 = id(forecast_high_0).state;
+          float low_0 = id(forecast_low_0).state;
+          if (!std::isnan(high_0)) {
+            it.printf(forecast_start_x, forecast_y + 20, id(font_small), TextAlign::TOP_CENTER, "%.0f°", high_0);
+          }
+          if (!std::isnan(low_0)) {
+            it.printf(forecast_start_x, forecast_y + 40, id(font_tiny), TextAlign::TOP_CENTER, "%.0f°", low_0);
+          }
+          
+          // Day 1
+          forecast_time.increment_day();
+          it.strftime(forecast_start_x + forecast_spacing, forecast_y, id(font_small), TextAlign::TOP_CENTER, "%a", forecast_time);
+          float high_1 = id(forecast_high_1).state;
+          float low_1 = id(forecast_low_1).state;
+          if (!std::isnan(high_1)) {
+            it.printf(forecast_start_x + forecast_spacing, forecast_y + 20, id(font_small), TextAlign::TOP_CENTER, "%.0f°", high_1);
+          }
+          if (!std::isnan(low_1)) {
+            it.printf(forecast_start_x + forecast_spacing, forecast_y + 40, id(font_tiny), TextAlign::TOP_CENTER, "%.0f°", low_1);
+          }
+          
+          // Day 2
+          forecast_time.increment_day();
+          it.strftime(forecast_start_x + (forecast_spacing * 2), forecast_y, id(font_small), TextAlign::TOP_CENTER, "%a", forecast_time);
+          float high_2 = id(forecast_high_2).state;
+          float low_2 = id(forecast_low_2).state;
+          if (!std::isnan(high_2)) {
+            it.printf(forecast_start_x + (forecast_spacing * 2), forecast_y + 20, id(font_small), TextAlign::TOP_CENTER, "%.0f°", high_2);
+          }
+          if (!std::isnan(low_2)) {
+            it.printf(forecast_start_x + (forecast_spacing * 2), forecast_y + 40, id(font_tiny), TextAlign::TOP_CENTER, "%.0f°", low_2);
+          }
+          
+          // Day 3
+          forecast_time.increment_day();
+          it.strftime(forecast_start_x + (forecast_spacing * 3), forecast_y, id(font_small), TextAlign::TOP_CENTER, "%a", forecast_time);
+          float high_3 = id(forecast_high_3).state;
+          float low_3 = id(forecast_low_3).state;
+          if (!std::isnan(high_3)) {
+            it.printf(forecast_start_x + (forecast_spacing * 3), forecast_y + 20, id(font_small), TextAlign::TOP_CENTER, "%.0f°", high_3);
+          }
+          if (!std::isnan(low_3)) {
+            it.printf(forecast_start_x + (forecast_spacing * 3), forecast_y + 40, id(font_tiny), TextAlign::TOP_CENTER, "%.0f°", low_3);
+          }
+          
+          // Day 4
+          forecast_time.increment_day();
+          it.strftime(forecast_start_x + (forecast_spacing * 4), forecast_y, id(font_small), TextAlign::TOP_CENTER, "%a", forecast_time);
+          float high_4 = id(forecast_high_4).state;
+          float low_4 = id(forecast_low_4).state;
+          if (!std::isnan(high_4)) {
+            it.printf(forecast_start_x + (forecast_spacing * 4), forecast_y + 20, id(font_small), TextAlign::TOP_CENTER, "%.0f°", high_4);
+          }
+          if (!std::isnan(low_4)) {
+            it.printf(forecast_start_x + (forecast_spacing * 4), forecast_y + 40, id(font_tiny), TextAlign::TOP_CENTER, "%.0f°", low_4);
+          }
+        }
+        
+        // Horizontal divider line below dewpoint/humidity section
+        //it.line(20, 175, 330, 175);
       }
       
       // Large wind compass with tick marks - moved right by 10 pixels
@@ -202,9 +373,9 @@ display:
       float wind_gust = id(wind_gust_sensor).state;
       float wind_dir = id(wind_direction).state;
       
-      int compass_x = 150;  // Center compass
-      int compass_y = 320;
-      int radius = 90;
+      int compass_x = 377;  // Center compass
+      int compass_y = 200;
+      int radius = 85;
       
       // Compass ring design with segments
       int outer_radius = radius;
@@ -227,108 +398,107 @@ display:
         it.line(outer_x, outer_y, inner_x, inner_y);
       }
       
-      // Cardinal and intercardinal directions - positioned outside outer circle
+      // Cardinal and intercardinal directions - positioned outside outer circle with bolder font
       int label_radius = radius + 15;
       
-      // Main cardinals
-      it.printf(compass_x, compass_y - label_radius, id(font_small), TextAlign::CENTER, "N");
-      it.printf(compass_x, compass_y + label_radius, id(font_small), TextAlign::CENTER, "S");
-      it.printf(compass_x + label_radius, compass_y + 2, id(font_small), TextAlign::CENTER, "E");
-      it.printf(compass_x - label_radius, compass_y + 2, id(font_small), TextAlign::CENTER, "W");
+      // Main cardinals - using medium font for better visibility
+      it.printf(compass_x, compass_y - label_radius, id(font_medium), TextAlign::CENTER, "N");
+      it.printf(compass_x, compass_y + label_radius, id(font_medium), TextAlign::CENTER, "S");
+      it.printf(compass_x + label_radius-2, compass_y + 2, id(font_medium), TextAlign::CENTER, "E");
+      it.printf(compass_x - label_radius, compass_y + 2, id(font_medium), TextAlign::CENTER, "W");
       
-      // Intercardinals
+      // Intercardinals - using small font for secondary directions
       int diag_offset = (int)(label_radius * 0.707); // cos(45°) ≈ 0.707
-      it.printf(compass_x + diag_offset, compass_y - diag_offset, id(font_tiny), TextAlign::CENTER, "NE");
-      it.printf(compass_x - diag_offset, compass_y - diag_offset, id(font_tiny), TextAlign::CENTER, "NW");
-      it.printf(compass_x + diag_offset, compass_y + diag_offset, id(font_tiny), TextAlign::CENTER, "SE");
-      it.printf(compass_x - diag_offset, compass_y + diag_offset, id(font_tiny), TextAlign::CENTER, "SW");
+      it.printf(compass_x + diag_offset, compass_y - diag_offset, id(font_small), TextAlign::CENTER, "NE");
+      it.printf(compass_x - diag_offset, compass_y - diag_offset, id(font_small), TextAlign::CENTER, "NW");
+      it.printf(compass_x + diag_offset, compass_y + diag_offset, id(font_small), TextAlign::CENTER, "SE");
+      it.printf(compass_x - diag_offset, compass_y + diag_offset, id(font_small), TextAlign::CENTER, "SW");
       
-      // Wind data in center with better mph positioning
+      // Wind data in center with better spacing
       if (!std::isnan(wind_speed)) {
-        // Format wind speed with smaller mph suffix positioned better
-        if (wind_speed >= 10.0) {
-          it.printf(compass_x - 10, compass_y - 30, id(font_large), TextAlign::CENTER, "%.0f", wind_speed);
-          it.printf(compass_x + 20, compass_y - 30, id(font_tiny), TextAlign::LEFT, "mph");
-        } else {
-          it.printf(compass_x - 10, compass_y - 30, id(font_large), TextAlign::CENTER, "%.1f", wind_speed);
-          it.printf(compass_x + 15, compass_y - 20, id(font_tiny), TextAlign::LEFT, "mph");
-        }
+        // Format wind speed with mph suffix
+        it.printf(compass_x, compass_y - 32, id(font_large), TextAlign::CENTER, "%.1f", wind_speed);
+        it.printf(compass_x, compass_y - 8, id(font_small), TextAlign::CENTER, "mph");
         
         if (!std::isnan(wind_gust)) {
-          // Also format gust the same way
-          if (wind_gust >= 10.0) {
-            it.printf(compass_x, compass_y - 5, id(font_tiny), TextAlign::CENTER, "Gust: %.0f mph", wind_gust);
-          } else {
-            it.printf(compass_x, compass_y - 5, id(font_tiny), TextAlign::CENTER, "Gust: %.1f mph", wind_gust);
-          }
+          it.printf(compass_x, compass_y + 13, id(font_small), TextAlign::CENTER, "gust:%.1f", wind_gust);
         }
         
-        //Max gust
+        // Max gust
         float max_gust = id(max_daily_gust).state;
         if (!std::isnan(max_gust)) {
-          // Format max gust the same way
-          if (max_gust >= 10.0) {
-            it.printf(compass_x, compass_y + 15, id(font_tiny), TextAlign::CENTER, "Max: %.0f mph", max_gust);
-          } else {
-            it.printf(compass_x, compass_y + 15, id(font_tiny), TextAlign::CENTER, "Max: %.1f mph", max_gust);
-          }
+          it.printf(compass_x, compass_y + 33, id(font_small), TextAlign::CENTER, "max:%.1f", max_gust);
         }
         
-        // Simple and clean wind direction indicator
+        // Triangle wind direction indicator: curved base following compass edge
         if (!std::isnan(wind_dir)) {
-          // Determine which segment the wind is coming from (16 segments, 22.5° each)
-          int segment = (int)((wind_dir + 11.25) / 22.5) % 16;
-          float segment_center = segment * 22.5;
-          float segment_start = segment_center - 11.25;
-          float segment_end = segment_center + 11.25;
+          // Base spans 22.5 degrees (same as compass segments)
+          float base_half_angle = 11.25;
+          float wind_rad = wind_dir * M_PI / 180.0;
           
-          // Fill the entire segment area with multiple triangular fills
-          float angle_step = 0.5; // Small step for smooth fill
-          for (float angle = segment_start; angle < segment_end; angle += angle_step) {
+          // Triangle tip points inward along the wind direction line
+          int tip_x = compass_x + (int)(inner_radius * sin(wind_rad));
+          int tip_y = compass_y - (int)(inner_radius * cos(wind_rad));
+          
+          // Draw curved base by filling multiple small triangles along the arc
+          float angle_step = 1.0;
+          for (float angle = wind_dir - base_half_angle; angle <= wind_dir + base_half_angle; angle += angle_step) {
             float rad1 = angle * M_PI / 180.0;
             float rad2 = (angle + angle_step) * M_PI / 180.0;
             
-            int outer_x1 = compass_x + (int)(outer_radius * sin(rad1));
-            int outer_y1 = compass_y - (int)(outer_radius * cos(rad1));
-            int outer_x2 = compass_x + (int)(outer_radius * sin(rad2));
-            int outer_y2 = compass_y - (int)(outer_radius * cos(rad2));
-            int inner_x1 = compass_x + (int)(inner_radius * sin(rad1));
-            int inner_y1 = compass_y - (int)(inner_radius * cos(rad1));
-            int inner_x2 = compass_x + (int)(inner_radius * sin(rad2));
-            int inner_y2 = compass_y - (int)(inner_radius * cos(rad2));
+            int arc_x1 = compass_x + (int)(outer_radius * sin(rad1));
+            int arc_y1 = compass_y - (int)(outer_radius * cos(rad1));
+            int arc_x2 = compass_x + (int)(outer_radius * sin(rad2));
+            int arc_y2 = compass_y - (int)(outer_radius * cos(rad2));
             
-            // Draw quad as two triangles to fill segment
-            it.filled_triangle(inner_x1, inner_y1, outer_x1, outer_y1, inner_x2, inner_y2);
-            it.filled_triangle(inner_x2, inner_y2, outer_x1, outer_y1, outer_x2, outer_y2);
+            // Fill triangle from tip to two adjacent points on arc
+            it.filled_triangle(tip_x, tip_y, arc_x1, arc_y1, arc_x2, arc_y2);
           }
         }
       } else {
         it.printf(compass_x, compass_y, id(font_small), TextAlign::CENTER, "No Wind");
       }
       
-      // Draw better sun with solar/UV data
-      int sun_x = 675;
-      int sun_y = 200;
-      int sun_radius = 75;
+      // Draw sun with solar/UV data in upper right
+      int sun_x = 120;
+      int sun_y = 203;
+      int sun_radius = 80;
       
-      // Draw sun circle (outline only, not filled)
+      // Draw bold sun circle with multiple concentric circles
       it.circle(sun_x, sun_y, sun_radius);
+      it.circle(sun_x, sun_y, sun_radius - 1);
+      it.circle(sun_x, sun_y, sun_radius + 1);
       
-      // Draw sun rays with alternating lengths for more realistic appearance
+      // Draw bold sun rays with alternating lengths and thickness
       for (int i = 0; i < 12; i++) {
         float ray_angle = i * 30.0 * M_PI / 180.0;
         
-        // Alternate between long and short rays
-        int ray_length = (i % 2 == 0) ? 25 : 15;
+        // Alternate between long/thick and short/thin rays
+        bool is_long = (i % 2 == 0);
+        int ray_length = is_long ? 25 : 15;
         
         int ray_start_x = sun_x + (int)((sun_radius + 5) * sin(ray_angle));
         int ray_start_y = sun_y - (int)((sun_radius + 5) * cos(ray_angle));
         int ray_end_x = sun_x + (int)((sun_radius + ray_length) * sin(ray_angle));
         int ray_end_y = sun_y - (int)((sun_radius + ray_length) * cos(ray_angle));
         
-        // Make rays thicker
+        // Draw rays with double thickness - all rays are thicker
         it.line(ray_start_x, ray_start_y, ray_end_x, ray_end_y);
         it.line(ray_start_x + 1, ray_start_y, ray_end_x + 1, ray_end_y);
+        it.line(ray_start_x, ray_start_y + 1, ray_end_x, ray_end_y + 1);
+        it.line(ray_start_x - 1, ray_start_y, ray_end_x - 1, ray_end_y);
+        it.line(ray_start_x, ray_start_y - 1, ray_end_x, ray_end_y - 1);
+        it.line(ray_start_x + 1, ray_start_y + 1, ray_end_x + 1, ray_end_y + 1);
+        
+        if (is_long) {
+          // Make long rays extra thick with more parallel lines
+          it.line(ray_start_x - 2, ray_start_y, ray_end_x - 2, ray_end_y);
+          it.line(ray_start_x + 2, ray_start_y, ray_end_x + 2, ray_end_y);
+          it.line(ray_start_x, ray_start_y - 2, ray_end_x, ray_end_y - 2);
+          it.line(ray_start_x, ray_start_y + 2, ray_end_x, ray_end_y + 2);
+          it.line(ray_start_x - 1, ray_start_y - 1, ray_end_x - 1, ray_end_y - 1);
+          it.line(ray_start_x + 1, ray_start_y - 1, ray_end_x + 1, ray_end_y - 1);
+        }
       }
       
       // Solar and UV data inside the sun
@@ -336,7 +506,7 @@ display:
       float uv = id(uv_index).state;
       
       if (!std::isnan(solar)) {
-        it.printf(sun_x, sun_y - 21, id(font_small), TextAlign::CENTER, "%.0f W/m2", solar);
+        it.printf(sun_x, sun_y - 21, id(font_medium), TextAlign::CENTER, "%.0f W/m2", solar);
       }
       
       if (!std::isnan(uv)) {
@@ -346,53 +516,190 @@ display:
         else if (uv >= 6) uv_level = "High";
         else if (uv >= 3) uv_level = "Moderate";
         
-        it.printf(sun_x, sun_y, id(font_small), TextAlign::CENTER, "UV %.1f", uv);
-        it.printf(sun_x, sun_y + 20, id(font_small), TextAlign::CENTER, "(%s)", uv_level.c_str());
+        it.printf(sun_x, sun_y, id(font_medium), TextAlign::CENTER, "UV %.1f", uv);
+        it.printf(sun_x, sun_y + 20, id(font_medium), TextAlign::CENTER, "(%s)", uv_level.c_str());
       }
       
 
       
-      // Rain data section
-      int rain_x = 400;
-      int rain_y = 200;
-      int rain_spacing = 28;
+      // Rain data section with box - right side between sun and clock
+      int rain_x = 30;
+      int rain_y = 335;
+      int rain_spacing = 22;
+      int rain_box_x = rain_x-10;
+      int rain_box_y = rain_y-10;
+      int rain_box_width = 200;
+      int rain_box_height = 130;
       
-      it.printf(rain_x, rain_y, id(font_medium), TextAlign::LEFT, "Rainfall");
+      // Draw box around rainfall section
+      it.rectangle(rain_box_x, rain_box_y, rain_box_width, rain_box_height);
       
-      float rain_rate_val = id(rain_rate).state;
-      if (!std::isnan(rain_rate_val) && rain_rate_val > 0) {
-        it.printf(rain_x, rain_y + rain_spacing, id(font_small), TextAlign::LEFT, "Rate: %.2f in/hr", rain_rate_val);
-      }
+      // Rainfall header - inverted (white text on black background)
+      it.filled_rectangle(rain_box_x, rain_box_y, rain_box_width, 30);
+      it.printf(114, rain_y-7, id(font_medium), COLOR_OFF, TextAlign::TOP_CENTER, "Rainfall");
+      //it.line(rain_box_x + 10, rain_y + 25, rain_box_x + rain_box_width - 10, rain_y + 25);
       
-      float hourly_rain_val = id(hourly_rain).state;
-      if (!std::isnan(hourly_rain_val) && hourly_rain_val > 0) {
-        it.printf(rain_x, rain_y + rain_spacing * 2, id(font_small), TextAlign::LEFT, "Hour: %.2f in", hourly_rain_val);
-      }
-      
+      // Simplified rain data - only Today, Month, Year
       float daily_rain_val = id(daily_rain).state;
       if (!std::isnan(daily_rain_val)) {
-        it.printf(rain_x, rain_y + rain_spacing * 3, id(font_small), TextAlign::LEFT, "Today: %.2f in", daily_rain_val);
-      }
-      
-      float weekly_rain_val = id(weekly_rain).state;
-      if (!std::isnan(weekly_rain_val) && weekly_rain_val > 0) {
-        it.printf(rain_x, rain_y + rain_spacing * 4, id(font_small), TextAlign::LEFT, "Week: %.2f in", weekly_rain_val);
+        it.printf(rain_x, rain_y + 30, id(font_small), TextAlign::LEFT, "Today:");
+        it.printf(rain_box_x + rain_box_width - 10, rain_y + 30, id(font_small), TextAlign::RIGHT, "%.2f in", daily_rain_val);
       }
       
       float monthly_rain_val = id(monthly_rain).state;
-      if (!std::isnan(monthly_rain_val) && monthly_rain_val > 0) {
-        it.printf(rain_x, rain_y + rain_spacing * 5, id(font_small), TextAlign::LEFT, "Month: %.2f in", monthly_rain_val);
+      if (!std::isnan(monthly_rain_val)) {
+        it.printf(rain_x, rain_y + 58, id(font_small), TextAlign::LEFT, "Month:");
+        it.printf(rain_box_x + rain_box_width - 10, rain_y + 58, id(font_small), TextAlign::RIGHT, "%.2f in", monthly_rain_val);
       }
       
       float yearly_rain_val = id(yearly_rain).state;
-      if (!std::isnan(yearly_rain_val) && yearly_rain_val > 0) {
-        it.printf(rain_x, rain_y + rain_spacing * 6, id(font_small), TextAlign::LEFT, "Year: %.2f in", yearly_rain_val);
+      if (!std::isnan(yearly_rain_val)) {
+        it.printf(rain_x, rain_y + 86, id(font_small), TextAlign::LEFT, "Year:");
+        it.printf(rain_box_x + rain_box_width - 10, rain_y + 86, id(font_small), TextAlign::RIGHT, "%.2f in", yearly_rain_val);
       }
       
-      // Windchill (moved up since bottom section is removed)
-      float windchill = id(windchill_temp).state;
-      if (!std::isnan(windchill) && !std::isnan(temp) && windchill < temp - 2) {
-        it.printf(300, 350, id(font_medium), "Windchill: %.1f°F", windchill);
+      // Stock market section - middle lower portion
+      int stock_x = 235;
+      int stock_y = 325;
+      int stock_box_width = 280;
+      int stock_box_height = 130;
+      
+      // Draw box around stock section
+      it.rectangle(stock_x, stock_y, stock_box_width, stock_box_height);
+      
+      // Stock header - inverted
+      it.filled_rectangle(stock_x, stock_y, stock_box_width, 30);
+      it.printf(stock_x + stock_box_width / 2, stock_y + 2, id(font_medium), COLOR_OFF, TextAlign::TOP_CENTER, "Stocks");
+      
+      // Display stocks
+      int stock_line_y = stock_y + 35;
+      int stock_line_spacing = 22;
+      int stock_percent_x = stock_x + stock_box_width - 7;  // Percentage aligned 5px from right
+      int stock_value_x = stock_x + stock_box_width - 80;   // Value aligned left of percentage
+      
+      float dow = id(stock_dow).state;
+      if (!std::isnan(dow)) {
+        it.printf(stock_x + 10, stock_line_y, id(font_small), TextAlign::LEFT, "DOW:");
+        it.printf(stock_value_x, stock_line_y - 2, id(font_small), TextAlign::RIGHT, "%.0f", dow);
+        
+        std::string dow_change = id(stock_dow_change).state;
+        if (dow_change.length() > 0) {
+          float change_val = atof(dow_change.c_str());
+          const char* arrow = (change_val >= 0) ? "+" : "-";
+          it.printf(stock_percent_x, stock_line_y - 2, id(font_small), TextAlign::RIGHT, "%s%.1f%%", arrow, fabs(change_val));
+        }
+      }
+      
+      float nasdaq = id(stock_nasdaq).state;
+      if (!std::isnan(nasdaq)) {
+        it.printf(stock_x + 10, stock_line_y + stock_line_spacing, id(font_small), TextAlign::LEFT, "NASDAQ:");
+        it.printf(stock_value_x, stock_line_y + stock_line_spacing - 2, id(font_small), TextAlign::RIGHT, "%.0f", nasdaq);
+        
+        std::string nasdaq_change = id(stock_nasdaq_change).state;
+        if (nasdaq_change.length() > 0) {
+          float change_val = atof(nasdaq_change.c_str());
+          const char* arrow = (change_val >= 0) ? "+" : "-";
+          it.printf(stock_percent_x, stock_line_y + stock_line_spacing - 2, id(font_small), TextAlign::RIGHT, "%s%.1f%%", arrow, fabs(change_val));
+        }
+      }
+      
+      float tsla = id(stock_tsla).state;
+      if (!std::isnan(tsla)) {
+        it.printf(stock_x + 10, stock_line_y + (stock_line_spacing * 2), id(font_small), TextAlign::LEFT, "TSLA:");
+        it.printf(stock_value_x, stock_line_y + (stock_line_spacing * 2) - 2, id(font_small), TextAlign::RIGHT, "$%.2f", tsla);
+        
+        std::string tsla_change = id(stock_tsla_change).state;
+        if (tsla_change.length() > 0) {
+          float change_val = atof(tsla_change.c_str());
+          const char* arrow = (change_val >= 0) ? "+" : "-";
+          it.printf(stock_percent_x, stock_line_y + (stock_line_spacing * 2) - 2, id(font_small), TextAlign::RIGHT, "%s%.1f%%", arrow, fabs(change_val));
+        }
+      }
+      
+      float psqh = id(stock_psqh).state;
+      if (!std::isnan(psqh)) {
+        it.printf(stock_x + 10, stock_line_y + (stock_line_spacing * 3), id(font_small), TextAlign::LEFT, "PSQH:");
+        it.printf(stock_value_x, stock_line_y + (stock_line_spacing * 3) - 2, id(font_small), TextAlign::RIGHT, "$%.2f", psqh);
+        
+        std::string psqh_change = id(stock_psqh_change).state;
+        if (psqh_change.length() > 0) {
+          float change_val = atof(psqh_change.c_str());
+          const char* arrow = (change_val >= 0) ? "+" : "-";
+          it.printf(stock_percent_x, stock_line_y + (stock_line_spacing * 3) - 2, id(font_small), TextAlign::RIGHT, "%s%.1f%%", arrow, fabs(change_val));
+        }
+      }
+      
+      // Calendar on right side
+      int cal_x = 530;
+      int cal_y = 230;
+      int cal_width = 250;
+      int cal_height = 225;
+      
+      // Draw calendar box
+      it.rectangle(cal_x, cal_y, cal_width, cal_height);
+      
+      // Calendar header with month/year (inverted)
+      auto cal_time = id(homeassistant_time).now();
+      if (cal_time.is_valid()) {
+        // Draw filled rectangle for header
+        it.filled_rectangle(cal_x, cal_y, cal_width, 31);
+        // Month/year in white text on black background
+        it.strftime(cal_x + cal_width / 2, cal_y + 4, id(font_medium), COLOR_OFF, TextAlign::TOP_CENTER, "%B %Y", cal_time);
+        
+        // Day headers (Su Mo Tu We Th Fr Sa)
+        const char* days[] = {"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"};
+        int day_width = cal_width / 7;
+        for (int i = 0; i < 7; i++) {
+          it.printf(cal_x + (i * day_width) + day_width / 2, cal_y + 36, id(font_tiny), TextAlign::TOP_CENTER, "%s", days[i]);
+        }
+        
+        // Calculate first day of month and days in month
+        int current_day = cal_time.day_of_month;
+        int current_month = cal_time.month;
+        int current_year = cal_time.year;
+        int current_day_of_week = cal_time.day_of_week; // 1=Sunday, 2=Monday, ..., 7=Saturday
+        
+        // Calculate day of week for first day of month using Zeller's congruence
+        int day_offset = (current_day - 1) % 7;
+        int start_day = current_day_of_week - 1 - day_offset; // Adjust back to first day
+        while (start_day < 0) start_day += 7;
+        while (start_day >= 7) start_day -= 7;
+        
+        // Determine days in month
+        int days_in_month = 31;
+        if (current_month == 4 || current_month == 6 || current_month == 9 || current_month == 11) {
+          days_in_month = 30;
+        } else if (current_month == 2) {
+          // Leap year check
+          bool is_leap = (current_year % 4 == 0 && current_year % 100 != 0) || (current_year % 400 == 0);
+          days_in_month = is_leap ? 29 : 28;
+        }
+        
+        // Draw calendar dates
+        int date_y_start = cal_y + 55;
+        int row_height = 28;
+        int date = 1;
+        
+        for (int week = 0; week < 6 && date <= days_in_month; week++) {
+          for (int day = 0; day < 7 && date <= days_in_month; day++) {
+            if (week == 0 && day < start_day) {
+              continue; // Skip days before month starts
+            }
+            
+            int date_x = cal_x + (day * day_width) + day_width / 2;
+            int date_y = date_y_start + (week * row_height);
+            
+            // Highlight current day with a circle
+            if (date == current_day) {
+              it.filled_circle(date_x, date_y + 12, 12, COLOR_ON);
+              it.printf(date_x, date_y, id(font_small), COLOR_OFF, TextAlign::TOP_CENTER, "%d", date);
+            } else {
+              it.printf(date_x, date_y, id(font_small), TextAlign::TOP_CENTER, "%d", date);
+            }
+            
+            date++;
+          }
+        }
       }
       
       // Credit (bottom right)

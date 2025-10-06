@@ -11,10 +11,10 @@ Write-Host "Building and uploading ESPHome firmware..." -ForegroundColor Green
 # Run ESPHome with appropriate upload method
 if ($USB) {
     Write-Host "Using USB upload method..." -ForegroundColor Yellow
-    esphome upload e-paper-display.yaml
-} else {
-    Write-Host "Using OTA/Auto-detect upload method..." -ForegroundColor Yellow
     esphome run e-paper-display.yaml
+} else {
+    Write-Host "Using OTA upload method..." -ForegroundColor Yellow
+    esphome run --device e-paper-display.local e-paper-display.yaml
 }
 
 # Copy YAML file to Home Assistant ESPHome folder
